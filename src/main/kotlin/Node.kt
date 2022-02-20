@@ -58,6 +58,10 @@ class Node (val id: Int) {
             newNull
         }
 
+    fun findPrevious(root: Node) =
+        root.getAllNodes()
+            .filter{ it.transitions.any{ it.next==this } }
+
     fun eval(ch: Char) =
         transitions
             .mapNotNull {it(ch) }
@@ -79,14 +83,16 @@ class Node (val id: Int) {
             successors(done)
         }
 
-    private fun successors(done: MutableSet<Node>): List<Node> =
+    private fun successors(done: MutableSet<Node>): Set<Node> =
         let {
             done.add(this)
-            listOf(this) +
+            setOf(this) +
                     transitions
                         .filter { it.next !in done }
                         .map { it.next.successors(done) }
                         .flatten()
+                        .toSet()
+                        .sortedBy{ it.id }
         }
 
     companion object {

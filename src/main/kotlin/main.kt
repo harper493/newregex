@@ -1,6 +1,6 @@
-val verbose = false
+val verbosity = 1
 var failures = 0
-var tests = setOf<Int>(5)
+var tests = setOf<Int>(9)
 
 
 fun main(args: Array<String>) {
@@ -9,7 +9,7 @@ fun main(args: Array<String>) {
     val m2 = test(rx1, "def", false)
     val m3 = test(rx1, "abd", false)
     val m4 = test(rx1, "abcd", false)
-    val m5 = test(rx1,"ab, false")
+    val m5 = testF(rx1,"ab")
 
     val rx2 = makeRx(2,"a.c")
     val m11 = test(rx2, "abc")
@@ -47,7 +47,7 @@ fun main(args: Array<String>) {
     val m44 = testF(rx5, "axyz")
     val m45 = testF(rx5, "xyzb")
 
-    val rx6 = makeRx(6, "a(b.*d)*e)")
+    val rx6 = makeRx(6, "a(b.*d)*e")
     val m50 = test(rx6, "ae")
     val m51 = test(rx6, "abde")
     val m52 = test(rx6, "abxde")
@@ -55,8 +55,33 @@ fun main(args: Array<String>) {
     val m54 = testF(rx6, "abxdbyyye")
     val m55 = testF(rx6, "axde")
 
-    if (failures>0) {
+    val rx7 = makeRx(7, "ab?c")
+    val m60 = test(rx7, "ac")
+    val m61 = test(rx7, "abc")
+    val m62 = testF(rx7, "abbc")
+    val m63 = testF(rx7, "ad")
+    val m64 = testF(rx7, "abd")
+    val m65 = testF(rx7, "axbc")
+
+    val rx8 = makeRx(8, "a(bc)?d")
+    val m70 = test(rx8,"ad")
+    val m71 = test(rx8, "abcd")
+    val m72 = testF(rx8, "abd")
+    val m73 = testF(rx8, "abc")
+    val m74 = testF(rx8, "abcx")
+
+    val rx9 = makeRx(9, "a(bc?d)*e")
+    val m80 = test(rx9, "ae")
+    val m81 = test(rx9, "abde")
+    val m82 = test(rx9, "abcde")
+    val m83 = test(rx9, "abcdbdbcde")
+    val m84 = testF(rx9, "abcdbd")
+
+
+    if (failures > 0) {
         println("\n$failures tests failed")
+    } else {
+        println("All tests passed!")
     }
 }
 
@@ -64,7 +89,7 @@ fun makeRx(t: Int, rxs: String) =
     run {
         if (t in tests || tests.isEmpty()) {
             val rx = NewRegex(rxs)
-            if (verbose) {
+            if (verbosity > 0) {
                 println(rx.show())
             }
             rx
@@ -75,9 +100,9 @@ fun makeRx(t: Int, rxs: String) =
 
 fun test(rx: NewRegex?, s: String, expected: Boolean=true) =
     run {
-        val result = rx?.match(s, verbose=verbose) ?: expected
+        val result = rx?.match(s, verbose=verbosity > 1) ?: expected
         if (result!=expected) {
-            println("Wrong result for '$s': got $result, eexpected $expected")
+            println("Wrong result for '$s': got $result, expected $expected")
             ++failures
         }
         result

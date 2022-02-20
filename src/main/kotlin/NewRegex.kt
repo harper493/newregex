@@ -15,7 +15,7 @@ class NewRegex(val rx: String?=null) {
         var capture = true
     }
 
-    fun show() = root.getAllNodes().map{ it.show() }.joinToString("\n\n")
+    fun show() = root.getAllNodes().map{ it.show() }.joinToString("\n")
 
     fun parse(rx: String) {
         val groupStack = mutableListOf<Group>()
@@ -58,6 +58,9 @@ class NewRegex(val rx: String?=null) {
             prevNode = n
         }
 
+        fun makeOptional(startNode: Node) {
+            startNode.addTransition(Transition.nullTransition(prevNode))
+        }
 
         fun flush() {
             when(state) {
@@ -81,10 +84,17 @@ class NewRegex(val rx: String?=null) {
                     }
                 }
                 State.star -> {
-                    val prevPrev = root.getAllNodes()
-                        .filter{ it.transitions.any{ it.next==prevNode } }
-                        .first()
+                    val prevPrev = prevNode.findPrevious(root).first()
                     makeRepeat(prevPrev)
+                }
+                State.query -> {
+                    val prevPrev = prevNode.findPrevious(root).first()
+                    makeOptional(prevPrev)
+                }
+                State.rparenQ -> {
+                    with(popGroup()) {
+                        makeOptional(this.start)
+                    }
                 }
             }
             state = State.none
@@ -141,6 +151,10 @@ class NewRegex(val rx: String?=null) {
                     state = State.lazyPlus
                 ch == '?' && state == State.lparen ->
                     state = State.lparenQ
+                ch == '?' && state == State.rparen ->
+                    state = State.rparenQ
+                ch == '?' ->
+                    state = State.query
                 ch == ':' && state == State.lparenQ ->
                     state = State.lparenNoCapture
                 ch == '|' -> {
@@ -195,10 +209,12 @@ class NewRegex(val rx: String?=null) {
             rparen,
             rparenStar,
             rparenStarLazy,
+            rparenQ,
             star,
             lazyStar,
             plus,
             lazyPlus,
+            query,
             choice,
             escape,
         }
