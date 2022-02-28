@@ -1,5 +1,5 @@
 class NewRegex(val rx: String?=null) {
-    private var root = Node(0)
+    private var root = Node.new()
 
     init {
         if (rx != null) {
@@ -52,14 +52,17 @@ class NewRegex(val rx: String?=null) {
                     poppedGroups.add(it!!)
                 }!!
 
-        fun makeRepeat(startNode: Node) {
-            val n = startNode.interposeNull()
-            prevNode.addTransition(Transition.nullTransition(n))
+        fun makeRepeat(startNode: Node, makeTran: (Node)->Transition = { n -> Transition.lambda(n) }) {
+            prevNode.addTransition(Transition.repeat(startNode))
+            val n = Node.new()
+            startNode.transitions.forEach{ t -> t.setRepeatStart() }
+            startNode.addTransition(makeTran(n))
+            startNode.setRepeatStart()
             prevNode = n
         }
 
         fun makeOptional(startNode: Node) {
-            startNode.addTransition(Transition.nullTransition(prevNode))
+            startNode.addTransition(Transition.lambda(prevNode))
         }
 
         fun flush() {
@@ -95,6 +98,10 @@ class NewRegex(val rx: String?=null) {
                     with(popGroup()) {
                         makeOptional(this.start)
                     }
+                }
+                State.plus -> {
+                    val prevPrev = prevNode.findPrevious(root).first()
+                    makeRepeat(prevPrev, { n-> Transition.counted(n, 1, null )})
                 }
             }
             state = State.none
@@ -183,19 +190,19 @@ class NewRegex(val rx: String?=null) {
         }
         flush()
         prevNode.setTerminal()
-        root.makeNullTransitions(mutableSetOf<Node>())
     }
 
     fun match(str: String, verbose: Boolean = false) =
-        let {
-            var transitions = listOf(root)
-            str.forEach { ch ->
-                if (verbose) println("$ch: ${  transitions.map{ "$it" }.joinToString(", ")}")
-                transitions = transitions.map{ it.eval(ch)}.flatten().filterNotNull()
-                if (verbose) println(transitions.map{ it.show() }.joinToString("\n"))
-            }
-            transitions.any{ it.terminal }
-        }
+        str.fold(listOf(Context(root))) { contexts, ch ->
+            (contexts.map { ctx ->
+                    ctx.eval(ch)
+                }.flatten()
+                    .groupBy { it.node }
+                    .values
+                    .map { it.collapse() }
+                    .flatten())
+                .also{ if (verbose) println(it) }
+        }.any { it.node.terminal }
 
 
     companion object {
