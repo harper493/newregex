@@ -106,7 +106,8 @@ fun main(args: Array<String>) {
     )
 
     testRx(21, ".*foo.*",
-        listOf( "foo", "xfoox", "reuwiuytruitruiwytwtetuiyrttwqytwuitwrertyeuiqetfoeqytwyetqqwfoqweqtyfootqwyequy" ),
+        listOf( "foo", "xfooxfoox", "xfoox", "xfooxfooxfooxfooxfooxfooxfooxfooxfooxfooxfooxfoox",
+            "reuwiuytruitruiwytwtetuiyrttfwqytwfuitwrertyeuiqetfoeqytwyetqqwfoqweqtyfootqwyfotreqwrefooequy" ),
         listOf( "qtqwetyqewytreqytrqeytqrweytqefoqwyetrqetrqeyqtrweyqtrweqyt" )
     )
 
