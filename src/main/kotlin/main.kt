@@ -1,6 +1,6 @@
-val verbosity = 0
+const val verbosity = 2
 var failures = 0
-var tests = setOf<Int>()
+var tests = setOf<Int>(15)
 
 
 fun main(args: Array<String>) {
@@ -70,6 +70,16 @@ fun main(args: Array<String>) {
         listOf( "abd", "abcbd", "axbcd", "abxd")
     )
 
+    testRx(14, "a(bc*)+d",
+        listOf( "abd", "abcd", "abccd", "abbd", "abbcd", "abbbcccd"),
+        listOf( "ad", "acd" )
+    )
+
+    testRx(15, "a(b*c)+d",
+        listOf( "acd", "abcd", "abbcd", "accd", "acbcd", "abbbbcbbbbccccd"),
+        listOf( "ad", "abd" )
+    )
+
     if (failures > 0) {
         println("\n$failures tests failed")
     } else {
@@ -77,7 +87,7 @@ fun main(args: Array<String>) {
     }
 }
 
-fun makeRx(t: Int, rxs: String) =
+fun makeRx(rxs: String) =
     NewRegex(rxs).also {
         if (verbosity > 0) {
             println("\n$rxs\n${it.show()}")
@@ -86,7 +96,7 @@ fun makeRx(t: Int, rxs: String) =
 
 fun testRx(t: Int, rxstr: String, good: List<String>, bad: List<String>) {
     if (t in tests || tests.isEmpty()) {
-        val rx = makeRx(t, rxstr)
+        val rx = makeRx(rxstr)
         good.forEach { test(t, rx, it, true) }
         bad.forEach { test(t, rx, it, false) }
     }

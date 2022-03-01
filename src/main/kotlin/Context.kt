@@ -1,4 +1,4 @@
-class Context(val node: Node, val prev: Node) {
+class Context(val node: Node, private val prev: Node) {
 
     class Counter(init: Int =  0) {
         var count = init; private set
@@ -11,16 +11,16 @@ class Context(val node: Node, val prev: Node) {
         }
     }
 
-    var repeatStack = mutableListOf<Counter>()
+    private var repeatStack = mutableListOf<Counter>()
 
     val repeats: Int get() = repeatStack.lastOrNull()?.count ?: 0
 
     override fun toString() =
-        "$prev\u2192$node" + if (repeatStack.isNotEmpty()) "(${repeatStack.map{ "$it"}.joinToString(",")})" else ""
+        "$prev\u2192$node" + if (repeatStack.isNotEmpty()) "(${repeatStack.joinToString(",") { "$it" }})" else ""
 
     fun clone(n: Node) =
         Context(n, node)
-            .also { it.repeatStack = this.repeatStack.map { Counter(it.count)}.toMutableList() }
+            .also { newctx -> newctx.repeatStack = this.repeatStack.map { ctr -> Counter(ctr.count)}.toMutableList() }
 
     fun countRepeat(doCount: Boolean = true) =
         also {
@@ -59,7 +59,7 @@ fun List<Context>.collapseOne() =
 
 fun List<Context>.collapse(): List<Context> =
     if (isEmpty()) {
-        listOf<Context>()
+        listOf()
     } else {
         with(collapseOne()) {
             (listOf(first()) + drop(1).collapse())
@@ -67,5 +67,5 @@ fun List<Context>.collapse(): List<Context> =
     }
 
 fun List<Context>.toString() =
-    "[ ${map{ "$it" }.joinToString(", ")} ]"
+    "[ ${joinToString(", ") { "$it" }} ]"
 

@@ -6,8 +6,8 @@ class Transition(
     val action: (Context)->Unit = { },
     val eval: (Char, Context)->Boolean ) {
 
-    var repeat = false; private set
-    var repeatStart = false; private set
+    private var repeat = false
+    private var repeatStart = false
 
     fun clone() =
         Transition(next, descr, consumes, alwaysNull, action, eval)
@@ -18,11 +18,11 @@ class Transition(
         } else null
 
     fun lambda(ctx: Context) =
-        if (alwaysNull || (!consumes && eval('\u0000', ctx)?: true)) {
+        if (alwaysNull || (!consumes && eval('\u0000', ctx))) {
             advance(ctx)
         } else null
 
-    fun advance(ctx: Context): Context {
+    private fun advance(ctx: Context): Context {
         val newctx = ctx.clone(next)
         action(newctx)
         if (next.repeatStart && !repeat) {
@@ -31,9 +31,9 @@ class Transition(
         return newctx
     }
 
-    fun setNext(n: Node) =
+    fun modifyNext(from: Node,to_: Node) =
         also {
-            next = n
+            if (next==from) next = to_
         }
 
     fun setRepeat(r: Boolean) =

@@ -1,8 +1,8 @@
 class Node (val id: Int) {
     private val captures = mutableListOf<Capture>()
     val transitions = mutableListOf<Transition>()
-    val predecessors = mutableSetOf<Node>()
-    private val nullTransitions = mutableSetOf<Node>();
+    private val predecessors = mutableSetOf<Node>()
+    private val nullTransitions = mutableSetOf<Node>()
     var terminal = false; private set
     var repeatStart = false; private set
 
@@ -10,6 +10,8 @@ class Node (val id: Int) {
         let {
             val n = new()
             n.copyTransitions(this)
+            n.repeatStart = repeatStart
+            n.terminal = terminal
             n
         }
 
@@ -21,7 +23,7 @@ class Node (val id: Int) {
 
     fun show() =
         "$id ${ if (terminal) "T" else ""}${ if (repeatStart) "R" else ""}" +
-                transitions.map{ "\n   $it" }.joinToString("") +
+                transitions.joinToString("") { "\n   $it" } +
                 if (nullTransitions.isNotEmpty()) "\n   +null -> $nullTransitions" else ""
 
     fun setCapture(c: Capture) =
@@ -64,10 +66,11 @@ class Node (val id: Int) {
 
     fun interposeNull() =
         let {
-            val newNull = clone()
+            val newNode = clone()
             transitions.clear()
-            addTransition(Transition.lambda(newNull))
-            newNull
+            addTransition(Transition.lambda(newNode))
+            getAllNodes().forEach{ node -> node.transitions.forEach{ t -> t.modifyNext(this, newNode)}}
+            newNode
         }
 
     fun findPrevious(root: Node) =
@@ -92,15 +95,17 @@ class Node (val id: Int) {
             done.add(this)
             setOf(this) +
                     transitions
+                        .asSequence()
                         .filter { it.next !in done }
                         .map { it.next.successors(done) }
                         .flatten()
                         .toSet()
                         .sortedBy{ it.id }
+                        .toList()
         }
 
     companion object {
-        var nodeId = 1
+        private var nodeId = 1
         fun new() =
             Node(nodeId)
                 .also { ++nodeId }

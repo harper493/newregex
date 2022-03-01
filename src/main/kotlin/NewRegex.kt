@@ -15,7 +15,7 @@ class NewRegex(val rx: String?=null) {
         var capture = true
     }
 
-    fun show() = root.getAllNodes().map{ it.show() }.joinToString("\n")
+    fun show() = root.getAllNodes().joinToString("\n") { it.show() }
 
     fun parse(rx: String) {
         val groupStack = mutableListOf<Group>()
@@ -53,11 +53,15 @@ class NewRegex(val rx: String?=null) {
                 }!!
 
         fun makeRepeat(startNode: Node, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
-            prevNode.addTransition(Transition.repeat(startNode))
+            var myStart = startNode
+            if (startNode.repeatStart) {
+                startNode.interposeNull()
+            }
+            prevNode.addTransition(Transition.repeat(myStart))
+            myStart.transitions.forEach{ t -> if (t.consumes) t.setRepeatStart() }
             val n = Node.new()
-            startNode.transitions.forEach{ t -> t.setRepeatStart() }
-            startNode.addTransition(makeTran(n))
-            startNode.setRepeatStart()
+            myStart.addTransition(makeTran(n))
+            myStart.setRepeatStart()
             prevNode = n
         }
 
@@ -86,6 +90,17 @@ class NewRegex(val rx: String?=null) {
                         makeRepeat(this.start)
                     }
                 }
+                State.rparenPlus -> {
+                    with(popGroup()) {
+                        makeRepeat(this.start) { n -> Transition.counted(n, 1, null) }
+                    }
+                }
+                State.rparenPlusLazy -> {
+                    with(popGroup()) {
+                        this.lazy = true
+                        makeRepeat(this.start) { n -> Transition.counted(n, 1, null) }
+                    }
+                }
                 State.star -> {
                     val prevPrev = prevNode.findPrevious(root).first()
                     makeRepeat(prevPrev)
@@ -101,7 +116,7 @@ class NewRegex(val rx: String?=null) {
                 }
                 State.plus -> {
                     val prevPrev = prevNode.findPrevious(root).first()
-                    makeRepeat(prevPrev, { n-> Transition.counted(n, 1, null )})
+                    makeRepeat(prevPrev) { n -> Transition.counted(n, 1, null) }
                 }
             }
             state = State.none
@@ -146,6 +161,8 @@ class NewRegex(val rx: String?=null) {
                     flush()
                     state = State.star
                 }
+                ch == '+' && state == State.rparen ->
+                    state = State.rparenPlus
                 ch == '+' -> {
                     flush()
                     state = State.plus
@@ -160,6 +177,10 @@ class NewRegex(val rx: String?=null) {
                     state = State.lparenQ
                 ch == '?' && state == State.rparen ->
                     state = State.rparenQ
+                ch == '?' && state == State.rparenStar ->
+                    state = State.rparenStarLazy
+                ch == '?' && state == State.rparenPlus ->
+                    state = State.rparenPlusLazy
                 ch == '?' ->
                     state = State.query
                 ch == ':' && state == State.lparenQ ->
@@ -217,6 +238,8 @@ class NewRegex(val rx: String?=null) {
             rparenStar,
             rparenStarLazy,
             rparenQ,
+            rparenPlus,
+            rparenPlusLazy,
             star,
             lazyStar,
             plus,
