@@ -1,7 +1,7 @@
-class Context(val node: Node) {
+class Context(val node: Node, val prev: Node) {
 
-    class Counter() {
-        var count = 0; private set
+    class Counter(init: Int =  0) {
+        var count = init; private set
 
         override fun toString() =
             "$count"
@@ -16,30 +16,15 @@ class Context(val node: Node) {
     val repeats: Int get() = repeatStack.lastOrNull()?.count ?: 0
 
     override fun toString() =
-        "$node" + if (repeats>0) "($repeats)" else ""
+        "$prev\u2192$node" + if (repeatStack.isNotEmpty()) "(${repeatStack.map{ "$it"}.joinToString(",")})" else ""
 
     fun clone(n: Node) =
-        Context(n)
-            .also { it.repeatStack = this.repeatStack.toMutableList() }
+        Context(n, node)
+            .also { it.repeatStack = this.repeatStack.map { Counter(it.count)}.toMutableList() }
 
     fun countRepeat(doCount: Boolean = true) =
         also {
             if (doCount) repeatStack.lastOrNull()?.inc()
-        }
-
-    fun manageRepeat(prev: Node, transition: Transition) =
-        also{
-            if (transition.repeat) {
-                countRepeat(true)
-            } else {
-                if (prev.repeatStart && !transition.repeatStart) {
-                    popRepeat()
-                }
-                if (node.repeatStart) {
-                    pushRepeat()
-                }
-            }
-
         }
 
     fun pushRepeat() =

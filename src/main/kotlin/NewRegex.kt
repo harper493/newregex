@@ -52,7 +52,7 @@ class NewRegex(val rx: String?=null) {
                     poppedGroups.add(it!!)
                 }!!
 
-        fun makeRepeat(startNode: Node, makeTran: (Node)->Transition = { n -> Transition.lambda(n) }) {
+        fun makeRepeat(startNode: Node, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
             prevNode.addTransition(Transition.repeat(startNode))
             val n = Node.new()
             startNode.transitions.forEach{ t -> t.setRepeatStart() }
@@ -183,7 +183,7 @@ class NewRegex(val rx: String?=null) {
                 else -> {
                     flush()
                     with(prevNode) {
-                        addTransition(Transition.exactMatch(newNode(), ch))
+                        addTransition(Transition.exact(newNode(), ch))
                     }
                 }
             }
@@ -193,7 +193,7 @@ class NewRegex(val rx: String?=null) {
     }
 
     fun match(str: String, verbose: Boolean = false) =
-        str.fold(listOf(Context(root))) { contexts, ch ->
+        str.fold(listOf(Context(root, root))) { contexts, ch ->
             (contexts.map { ctx ->
                     ctx.eval(ch)
                 }.flatten()

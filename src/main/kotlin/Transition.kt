@@ -3,25 +3,33 @@ class Transition(
     val descr: String,
     val consumes: Boolean = true,
     val alwaysNull: Boolean = false,
+    val action: (Context)->Unit = { },
     val eval: (Char, Context)->Boolean ) {
 
     var repeat = false; private set
     var repeatStart = false; private set
 
     fun clone() =
-        Transition(next, descr, consumes, alwaysNull, eval)
+        Transition(next, descr, consumes, alwaysNull, action, eval)
 
     fun matches(ch: Char, ctx: Context) =
         if (consumes && eval(ch, ctx)) {
-            ctx.clone(next)
-                .manageRepeat(ctx.node, this)
+            advance(ctx)
         } else null
 
     fun lambda(ctx: Context) =
         if (alwaysNull || (!consumes && eval('\u0000', ctx)?: true)) {
-            ctx.clone(next)
-                .manageRepeat(ctx.node, this)
+            advance(ctx)
         } else null
+
+    fun advance(ctx: Context): Context {
+        val newctx = ctx.clone(next)
+        action(newctx)
+        if (next.repeatStart && !repeat) {
+            newctx.pushRepeat()
+        }
+        return newctx
+    }
 
     fun setNext(n: Node) =
         also {
@@ -42,7 +50,7 @@ class Transition(
         "$descr -> $next ${ if (repeat) "R" else ""}${ if (repeatStart) "S" else "" }"
 
     companion object {
-        fun exactMatch(n: Node, minChar: Char, maxChar: Char? = null) =
+        fun exact(n: Node, minChar: Char, maxChar: Char? = null) =
             Transition(n, "exact '$minChar'"){ ch, ctx -> ch>=minChar && ch <= (maxChar ?: minChar) }
 
         fun dot(n: Node) =
@@ -51,12 +59,18 @@ class Transition(
         fun lambda(n: Node) =
             Transition(n, "null", false, true){ ch, ctx -> true }
 
+        fun exitRepeat(n: Node) =
+            Transition(n, "exitRepeat", false, true,
+                action = { ctx -> ctx.popRepeat() }){ ch, ctx -> true }
+
         fun repeat(n: Node) =
-            Transition(n, "repeat", false) { ch, ctx -> true }
+            Transition(n, "repeat", false,
+            action = { ctx -> ctx.countRepeat() }) { ch, ctx -> true }
                 .setRepeat(true)
 
         fun counted(n: Node, minRepeats: Int, maxRepeats: Int?) =
-            Transition(n, "counted($minRepeats..$maxRepeats)", false)
+            Transition(n, "counted($minRepeats..$maxRepeats)", false,
+                action = { ctx -> ctx.popRepeat() })
             { ch, ctx -> ctx.repeats in minRepeats..(maxRepeats ?: ctx.repeats) }
     }
 }

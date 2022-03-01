@@ -1,4 +1,4 @@
-val verbosity = 1
+val verbosity = 0
 var failures = 0
 var tests = setOf<Int>()
 
@@ -55,10 +55,19 @@ fun main(args: Array<String>) {
         listOf( "ac", "axc", "abbd", "axbbbc", "abbxc")
     )
 
-
     testRx(11, "ab*c*d",
         listOf( "ad", "abcd", "abd", "acd", "abbbccd"),
         listOf( "ac", "ab", "acbd", "abbccbd")
+    )
+
+    testRx(12, "a(bc*)*d",
+        listOf( "ad", "abd", "abcd", "abbcd", "abccd", "abbbd", "abcbcbcbd"),
+        listOf( "ax", "acd", "accd" )
+    )
+
+    testRx(13, "a(bc+)*d",
+        listOf( "ad", "abcd", "abccd", "abcbccd"),
+        listOf( "abd", "abcbd", "axbcd", "abxd")
     )
 
     if (failures > 0) {
@@ -71,7 +80,7 @@ fun main(args: Array<String>) {
 fun makeRx(t: Int, rxs: String) =
     NewRegex(rxs).also {
         if (verbosity > 0) {
-            println("\n${it.show()}")
+            println("\n$rxs\n${it.show()}")
         }
     }
 
