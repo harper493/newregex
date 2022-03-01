@@ -6,6 +6,7 @@ class Node (val id: Int) {
     var terminal = false; private set
     var repeatStart = false; private set
     var transient: Boolean = false; private set
+    var maxRepeats: Int? = null; private set
 
     fun clone() =
         let {
@@ -31,6 +32,7 @@ class Node (val id: Int) {
         if (transitions.all{ !it.consumes } && !terminal) {
             transient = true
         }
+        maxRepeats = transitions.filter{ it.maxRepeats != null}.maxOfOrNull{ it.maxRepeats!! }
     }
 
     fun setCapture(c: Capture) =

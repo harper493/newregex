@@ -3,6 +3,7 @@ class Transition(
     val descr: String,
     val consumes: Boolean = true,
     val alwaysNull: Boolean = false,
+    val maxRepeats: Int? = null,
     val action: (Context)->Unit = { },
     val eval: (Char, Context)->Boolean ) {
 
@@ -10,7 +11,7 @@ class Transition(
     private var repeatStart = false
 
     fun clone() =
-        Transition(next, descr, consumes, alwaysNull, action, eval)
+        Transition(next, descr, consumes, alwaysNull, maxRepeats, action, eval)
 
     fun matches(ch: Char, ctx: Context) =
         if (consumes && eval(ch, ctx)) {
@@ -69,7 +70,7 @@ class Transition(
                 .setRepeat(true)
 
         fun counted(n: Node, minRepeats: Int, maxRepeats: Int?) =
-            Transition(n, "counted($minRepeats..$maxRepeats)", false,
+            Transition(n, "counted($minRepeats..$maxRepeats)", false, maxRepeats = maxRepeats,
                 action = { ctx -> ctx.popRepeat() })
             { ch, ctx -> ctx.repeats in minRepeats..(maxRepeats ?: ctx.repeats) }
     }

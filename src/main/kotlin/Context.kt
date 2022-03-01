@@ -41,7 +41,8 @@ class Context(val node: Node, private val prev: Node) {
         node.eval(ch, this)
 
     fun collapseWith(other: Context): Context? =
-        if (repeats==other.repeats && node==other.node) this else null
+        if (node==other.node &&
+            (node.maxRepeats==null || repeats==other.repeats || minOf(repeats, other.repeats) >= node.maxRepeats!!)) this else null
             .also { val i = 1}
 
 }
