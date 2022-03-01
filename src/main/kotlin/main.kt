@@ -1,6 +1,6 @@
 const val verbosity = 2
 var failures = 0
-var tests = setOf<Int>(15)
+var tests = setOf<Int>(21)
 
 
 fun main(args: Array<String>) {
@@ -78,6 +78,36 @@ fun main(args: Array<String>) {
     testRx(15, "a(b*c)+d",
         listOf( "acd", "abcd", "abbcd", "accd", "acbcd", "abbbbcbbbbccccd"),
         listOf( "ad", "abd" )
+    )
+
+    testRx(16, "a(((b*c)+d?)+e)*f",
+        listOf( "af", "acef", "abcdef", "abbbccdcdcecef"),
+        listOf( "acf", "abcdf", "abcdebcf" )
+    )
+
+    testRx(17, "abc|def",
+        listOf( "abc", "def"),
+        listOf( "abcdef", "", "ab", "ef" )
+    )
+
+    testRx(18, "(abc|def)",
+        listOf( "abc", "def"),
+        listOf( "abcdef", "", "ab", "ef" )
+    )
+
+    testRx(19, "(abc|def)*",
+        listOf( "abc", "def", "abcdef", "", "abcdefabc", "abcabcabcdefdef"),
+        listOf( "ab", "ef" )
+    )
+
+    testRx(20, "((ab)*c|def?)+g",
+        listOf( "abcg", "cg", "deg", "defg", "cdefdeg", "ababcdeg" ),
+        listOf( "acg", "deffg", "abg", "" )
+    )
+
+    testRx(21, ".*foo.*",
+        listOf( "foo", "xfoox", "reuwiuytruitruiwytwtetuiyrttwqytwuitwrertyeuiqetfoeqytwyetqqwfoqweqtyfootqwyequy" ),
+        listOf( "qtqwetyqewytreqytrqeytqrweytqefoqwyetrqetrqeyqtrweyqtrweqyt" )
     )
 
     if (failures > 0) {

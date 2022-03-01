@@ -9,10 +9,10 @@ class NewRegex(val rx: String?=null) {
 
     class SyntaxException(msg: String) : Exception(msg)
 
-    class Group(val start: Node) {
+    class Group(val start: Node, val capture: Boolean) {
         var repeat = false
         var lazy = false
-        var capture = true
+        val tails = mutableListOf<Node>()
     }
 
     fun show() = root.getAllNodes().joinToString("\n") { it.show() }
@@ -41,22 +41,32 @@ class NewRegex(val rx: String?=null) {
                     prevNode = it
                 }
 
-        fun pushGroup() =
-            Group(prevNode).also { groupStack.add(it) }
+        fun pushGroup(n: Node, capture: Boolean) =
+            Group(n, capture).also { groupStack.add(it) }
 
         fun popGroup() =
-            groupStack.lastOrNull()
-                .also {
-                    throwIf(groupStack.isEmpty(), "unmatched right parenthesis")
+            (groupStack.lastOrNull()
+                ?.also { group ->
+                    if (group.tails.isNotEmpty()) {
+                        group.tails.add(prevNode)
+                        prevNode = Node.new()
+                        group.tails.forEach{ n -> n.addTransition(Transition.lambda(prevNode)) }
+                    }
                     groupStack.removeLast()
-                    poppedGroups.add(it!!)
-                }!!
+                    poppedGroups.add(group)
+                } ?: throwIf(true, "unmatched right parenthesis").let { null })!!
 
-        fun makeRepeat(startNode: Node, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
-            var myStart = startNode
-            if (startNode.repeatStart) {
-                startNode.interposeNull()
-            }
+        fun makeRepeat(start: Node, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
+            val myStart =
+                when {
+                    start.repeatStart -> {
+                        start.interposeNull()
+                        start
+                    }
+                    start == root ->
+                        start.interposeNull()
+                    else -> start
+                }
             prevNode.addTransition(Transition.repeat(myStart))
             myStart.transitions.forEach{ t -> if (t.consumes) t.setRepeatStart() }
             val n = Node.new()
@@ -72,10 +82,9 @@ class NewRegex(val rx: String?=null) {
         fun flush() {
             when(state) {
                 State.lparen ->
-                    pushGroup()
+                    pushGroup(prevNode, capture=true)
                 State.lparenNoCapture ->
-                    pushGroup()
-                        .also{ it.capture = false }
+                    pushGroup(prevNode, capture=false)
                 State.rparen -> {
                     popGroup()
                 }
@@ -187,9 +196,13 @@ class NewRegex(val rx: String?=null) {
                     state = State.lparenNoCapture
                 ch == '|' -> {
                     flush()
-                    choices.add(Node.new())
-                    prevNode = choices.last()
-                    state = State.none
+                    if (groupStack.isEmpty()) {
+                        pushGroup(root, capture=false)
+                    }
+                    with (groupStack.last()!!) {
+                        tails.add(prevNode)
+                        prevNode = start
+                    }
                 }
                 ch == '\\' -> {
                     flush()
@@ -210,20 +223,25 @@ class NewRegex(val rx: String?=null) {
             }
         }
         flush()
+        if (groupStack.isNotEmpty()) {
+            popGroup()
+        }
         prevNode.setTerminal()
     }
 
-    fun match(str: String, verbose: Boolean = false) =
-        str.fold(listOf(Context(root, root))) { contexts, ch ->
+    fun match(str: String, verbose: Boolean = false): Boolean {
+        val start = root.makeClosure(listOf(Context(root, root)))
+        return str.fold(start) { contexts, ch ->
             (contexts.map { ctx ->
-                    ctx.eval(ch)
-                }.flatten()
-                    .groupBy { it.node }
-                    .values
-                    .map { it.collapse() }
-                    .flatten())
-                .also{ if (verbose) println(it) }
+                ctx.eval(ch)
+            }.flatten()
+                .groupBy { it.node }
+                .values
+                .map { it.collapse() }
+                .flatten())
+                .also { if (verbose) println(it) }
         }.any { it.node.terminal }
+    }
 
 
     companion object {

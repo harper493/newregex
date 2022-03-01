@@ -78,11 +78,10 @@ class Node (val id: Int) {
             .filter{ it.transitions.any{ it.next==this } }
 
     fun eval(ch: Char, ctx: Context) =
-        transitions
-            .mapNotNull { it.matches(ch, ctx) }
-            .let { cl ->
-                    iterativeClosure(cl) { c2 -> c2.node.transitions.mapNotNull { t -> t.lambda(c2) } }
-            }
+            makeClosure(transitions.mapNotNull { it.matches(ch, ctx) })
+
+    fun makeClosure(contexts: List<Context>) =
+        iterativeClosure(contexts) { c2 -> c2.node.transitions.mapNotNull { t -> t.lambda(c2) } }
 
     fun getAllNodes() =
         let {
