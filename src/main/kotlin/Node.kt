@@ -5,6 +5,7 @@ class Node (val id: Int) {
     private val nullTransitions = mutableSetOf<Node>()
     var terminal = false; private set
     var repeatStart = false; private set
+    var transient: Boolean = false; private set
 
     fun clone() =
         let {
@@ -22,9 +23,15 @@ class Node (val id: Int) {
     override fun toString() = "$id"
 
     fun show() =
-        "$id ${ if (terminal) "T" else ""}${ if (repeatStart) "R" else ""}" +
+        "$id ${ if (terminal) "T" else ""}${ if (repeatStart) "R" else ""}${ if (transient) "X" else ""}" +
                 transitions.joinToString("") { "\n   $it" } +
                 if (nullTransitions.isNotEmpty()) "\n   +null -> $nullTransitions" else ""
+
+    fun finalize() {
+        if (transitions.all{ !it.consumes } && !terminal) {
+            transient = true
+        }
+    }
 
     fun setCapture(c: Capture) =
         also {
@@ -79,6 +86,7 @@ class Node (val id: Int) {
 
     fun eval(ch: Char, ctx: Context) =
             makeClosure(transitions.mapNotNull { it.matches(ch, ctx) })
+                .filter{ !it.node.transient }
 
     fun makeClosure(contexts: List<Context>) =
         iterativeClosure(contexts) { c2 -> c2.node.transitions.mapNotNull { t -> t.lambda(c2) } }

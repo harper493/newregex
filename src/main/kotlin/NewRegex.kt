@@ -227,6 +227,7 @@ class NewRegex(val rx: String?=null) {
             popGroup()
         }
         prevNode.setTerminal()
+        root.getAllNodes().forEach{ it.finalize() }
     }
 
     fun match(str: String, verbose: Boolean = false): Boolean {
