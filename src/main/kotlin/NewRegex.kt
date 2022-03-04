@@ -67,12 +67,17 @@ class NewRegex(val rx: String?=null) {
                     prevNode.addGroupEnd()
                 } ?: throwIf(true, "unmatched right parenthesis").let { null })!!
 
-        fun makeRepeat(lazy: Boolean, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
+        fun makeRepeat(lazy: Boolean, fromTail: Boolean = false, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
             val start = popGroup().start
-            prevNode.addTransition(Transition.repeat(start))
+            val oldPrev = prevNode
+            oldPrev.addTransition(Transition.repeat(start))
             start.transitions.forEach{ t -> if (t.consumes) t.setRepeatStart() }
             val n = Node.new()
-            start.addTransition(makeTran(n))
+            if (fromTail) {
+                oldPrev.addTransition(makeTran(n))
+            } else {
+                start.addTransition(makeTran(n))
+            }
             start.setRepeatStart()
             prevNode = n
         }
@@ -106,10 +111,10 @@ class NewRegex(val rx: String?=null) {
                     makeRepeat(lazy=true)
                 }
                 State.rparenPlus -> {
-                    makeRepeat(lazy=false) { n -> Transition.counted(n, 1, null) }
+                    makeRepeat(lazy=false, fromTail=true)
                 }
                 State.rparenPlusLazy -> {
-                    makeRepeat(lazy=true) { n -> Transition.counted(n, 1, null) }
+                    makeRepeat(lazy=true, fromTail=true)
                 }
                 State.rparenQ -> {
                     makeOptional()
@@ -124,11 +129,11 @@ class NewRegex(val rx: String?=null) {
                 }
                 State.plus -> {
                     makeGroupFromAtom()
-                    makeRepeat(lazy=false) { n -> Transition.counted(n, 1, null) }
+                    makeRepeat(lazy=false, fromTail=true)
                 }
                 State.lazyPlus -> {
                     makeGroupFromAtom()
-                    makeRepeat(lazy=true) { n -> Transition.counted(n, 1, null) }
+                    makeRepeat(lazy=true, fromTail=true)
                 }
             }
             state = State.none
