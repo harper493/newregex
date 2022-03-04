@@ -10,8 +10,9 @@ class NewRegex(val rx: String?=null) {
     class SyntaxException(msg: String) : Exception(msg)
 
     class Group(val start: Node, val capture: Boolean) {
-        var repeat = false
+        val id = groupId.also { ++groupId }
         var lazy = false
+        var synthetic = false
         val tails = mutableListOf<Node>()
     }
 
@@ -25,7 +26,6 @@ class NewRegex(val rx: String?=null) {
         val choiceChars = mutableListOf<Char>()
         var choiceRange = false
         val choices = mutableListOf<Node>()
-        val poppedGroups = mutableListOf<Group>()
         var index = 0
         var lazy = true
 
@@ -41,8 +41,19 @@ class NewRegex(val rx: String?=null) {
                     prevNode = it
                 }
 
-        fun pushGroup(n: Node, capture: Boolean) =
-            Group(n, capture).also { groupStack.add(it) }
+        fun newGroup(start: Node, capture: Boolean) =
+            Group(start, capture)
+                .also { g ->
+                    start.addGroup(g)
+                    groupStack.add(g)
+                }
+
+        fun pushGroup(capture: Boolean) =
+            let {
+                val start = prevNode
+                prevNode.addTransition(Transition.lambda(newNode()))
+                newGroup(start, capture)
+            }
 
         fun popGroup() =
             (groupStack.lastOrNull()
@@ -53,84 +64,77 @@ class NewRegex(val rx: String?=null) {
                         group.tails.forEach{ n -> n.addTransition(Transition.lambda(prevNode)) }
                     }
                     groupStack.removeLast()
-                    poppedGroups.add(group)
+                    prevNode.addGroupEnd()
                 } ?: throwIf(true, "unmatched right parenthesis").let { null })!!
 
-        fun makeRepeat(start: Node, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
-            val myStart =
-                when {
-                    start.repeatStart -> {
-                        start.interposeNull()
-                        start
-                    }
-                    start == root ->
-                        start.interposeNull()
-                    else -> start
-                }
-            prevNode.addTransition(Transition.repeat(myStart))
-            myStart.transitions.forEach{ t -> if (t.consumes) t.setRepeatStart() }
+        fun makeRepeat(lazy: Boolean, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
+            val start = popGroup().start
+            prevNode.addTransition(Transition.repeat(start))
+            start.transitions.forEach{ t -> if (t.consumes) t.setRepeatStart() }
             val n = Node.new()
-            myStart.addTransition(makeTran(n))
-            myStart.setRepeatStart()
+            start.addTransition(makeTran(n))
+            start.setRepeatStart()
             prevNode = n
         }
 
-        fun makeOptional(startNode: Node) {
-            startNode.addTransition(Transition.lambda(prevNode))
+        fun makeOptional() {
+            popGroup().start.addTransition(Transition.lambda(prevNode))
         }
+
+        fun makeGroupFromAtom() =
+            let {
+                val prevPrev = prevNode.findPrevious(root).first()
+                prevPrev.interposeNull()
+                newGroup(prevPrev, capture = false)
+            }
 
         fun flush() {
             when(state) {
                 State.lparen ->
-                    pushGroup(prevNode, capture=true)
+                    pushGroup(capture=true)
                 State.lparenNoCapture ->
-                    pushGroup(prevNode, capture=false)
+                    pushGroup(capture=false)
+                State.lparenQ ->
+                    throwIf(true, "unexpected character after (?")
                 State.rparen -> {
                     popGroup()
                 }
                 State.rparenStar -> {
-                    with(popGroup()) {
-                        makeRepeat(this.start)
-                    }
+                    makeRepeat(lazy=false)
                 }
                 State.rparenStarLazy -> {
-                    with(popGroup()) {
-                        this.lazy = true
-                        makeRepeat(this.start)
-                    }
+                    makeRepeat(lazy=true)
                 }
                 State.rparenPlus -> {
-                    with(popGroup()) {
-                        makeRepeat(this.start) { n -> Transition.counted(n, 1, null) }
-                    }
+                    makeRepeat(lazy=false) { n -> Transition.counted(n, 1, null) }
                 }
                 State.rparenPlusLazy -> {
-                    with(popGroup()) {
-                        this.lazy = true
-                        makeRepeat(this.start) { n -> Transition.counted(n, 1, null) }
-                    }
-                }
-                State.star -> {
-                    val prevPrev = prevNode.findPrevious(root).first()
-                    makeRepeat(prevPrev)
-                }
-                State.query -> {
-                    val prevPrev = prevNode.findPrevious(root).first()
-                    makeOptional(prevPrev)
+                    makeRepeat(lazy=true) { n -> Transition.counted(n, 1, null) }
                 }
                 State.rparenQ -> {
-                    with(popGroup()) {
-                        makeOptional(this.start)
-                    }
+                    makeOptional()
+                }
+                State.star -> {
+                    makeGroupFromAtom()
+                    makeRepeat(lazy=false)
+                }
+                State.query -> {
+                    makeGroupFromAtom()
+                    makeOptional()
                 }
                 State.plus -> {
-                    val prevPrev = prevNode.findPrevious(root).first()
-                    makeRepeat(prevPrev) { n -> Transition.counted(n, 1, null) }
+                    makeGroupFromAtom()
+                    makeRepeat(lazy=false) { n -> Transition.counted(n, 1, null) }
+                }
+                State.lazyPlus -> {
+                    makeGroupFromAtom()
+                    makeRepeat(lazy=true) { n -> Transition.counted(n, 1, null) }
                 }
             }
             state = State.none
         }
 
+        root.addTransition(Transition.lambda(newNode()))
         rx.forEachIndexed{ idx, ch->
             index = idx
             when {
@@ -197,9 +201,10 @@ class NewRegex(val rx: String?=null) {
                 ch == '|' -> {
                     flush()
                     if (groupStack.isEmpty()) {
-                        pushGroup(root, capture=false)
+                        newGroup(root, capture=false)
+                            .also { it.synthetic = true }
                     }
-                    with (groupStack.last()!!) {
+                    with (groupStack.last()) {
                         tails.add(prevNode)
                         prevNode = start
                     }
@@ -215,6 +220,7 @@ class NewRegex(val rx: String?=null) {
                     }
                 }
                 else -> {
+                    throwIf(state==State.lparenQ, "unexpected character after (?")
                     flush()
                     with(prevNode) {
                         addTransition(Transition.exact(newNode(), ch))
@@ -224,7 +230,7 @@ class NewRegex(val rx: String?=null) {
         }
         flush()
         if (groupStack.isNotEmpty()) {
-            popGroup()
+            throwIf(!popGroup().synthetic, "unmatched left parenthesis")
         }
         prevNode.setTerminal()
         root.getAllNodes().forEach{ it.finalize() }
@@ -232,15 +238,15 @@ class NewRegex(val rx: String?=null) {
 
     fun match(str: String, verbose: Boolean = false): Boolean {
         val start = root.makeClosure(listOf(Context(root, root)))
-        return str.fold(start) { contexts, ch ->
+        return str.foldIndexed(start) { index, contexts, ch ->
             (contexts.map { ctx ->
-                ctx.eval(ch)
+                ctx.eval(index, ch)
             }.flatten()
                 .groupBy { it.node }
                 .values
                 .map { it.collapse() }
                 .flatten())
-                .also { if (verbose) println(it) }
+                .also { if (verbose) println("$ch   $it") }
         }.any { it.node.terminal }
     }
 
@@ -267,5 +273,11 @@ class NewRegex(val rx: String?=null) {
             choice,
             escape,
         }
+        var groupId = 1
+        fun reset() {
+            Node.reset()
+            groupId = 1
+        }
+
     }
 }

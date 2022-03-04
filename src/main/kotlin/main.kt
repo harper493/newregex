@@ -1,6 +1,7 @@
-const val verbosity = 2
+const val verbosity = 1
 var failures = 0
-var tests = setOf<Int>(21)
+var tests = setOf<Int>()
+val evaluate = true
 
 
 fun main(args: Array<String>) {
@@ -16,6 +17,11 @@ fun main(args: Array<String>) {
     )
 
     testRx(3,"ab*c",
+        listOf("ac", "abc", "abbc", "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc"),
+        listOf("axc",  "axxc",  "zbc",  "ab",  "abx")
+    )
+
+    testRx(3000,"a(b)*c",
         listOf("ac", "abc", "abbc", "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc"),
         listOf("axc",  "axxc",  "zbc",  "ab",  "abx")
     )
@@ -111,10 +117,65 @@ fun main(args: Array<String>) {
         listOf( "qtqwetyqewytreqytrqeytqrweytqefoqwyetrqetrqeyqtrweyqtrweqyt" )
     )
 
+    testRx(200, "(x+x+)+y",
+        listOf("xxxxxxxxxxy"),
+        listOf("xxxxxxxxxx")
+    )
+
+    testRx(201, "a(b(c(d)))e",
+        listOf(),
+        listOf()
+    )
+
+    testRx(202, "a(b(c(d)*)*)*e",
+        listOf(),
+        listOf()
+    )
+
+    testRx(203, "((((a)b)c)d)e",
+        listOf(),
+        listOf()
+    )
+
+    testRx(204, "((((a)+b)+c)+d)+e",
+        listOf(),
+        listOf()
+    )
+
+    testRx(205, "x((((a)+b)+c)+d)+e",
+        listOf(),
+        listOf()
+    )
+
+    testRx(206, "a(b|c)*b+d",
+        listOf("abcbbd"),
+        listOf()
+    )
+
+    if (goodTest(100)) {
+        for (rxs in listOf(
+            "(abc",
+            "def)",
+            "(?abc"
+        )) {
+            NewRegex.reset()
+            var failed = false
+            try {
+                val rx = NewRegex(rxs)
+            } catch (e: NewRegex.SyntaxException) {
+                failed = true
+            }
+            if (!failed) {
+                println("Bad regex '$rxs' not rejected")
+                ++failures
+            }
+        }
+    }
+
     if (failures > 0) {
         println("\n$failures tests failed")
     } else {
-        println("All tests passed!")
+        println("\nAll tests passed!")
     }
 }
 
@@ -126,12 +187,18 @@ fun makeRx(rxs: String) =
     }
 
 fun testRx(t: Int, rxstr: String, good: List<String>, bad: List<String>) {
-    if (t in tests || tests.isEmpty()) {
+    NewRegex.reset()
+    if (goodTest(t)) {
         val rx = makeRx(rxstr)
-        good.forEach { test(t, rx, it, true) }
-        bad.forEach { test(t, rx, it, false) }
+        if (evaluate) {
+            good.forEach { test(t, rx, it, true) }
+            bad.forEach { test(t, rx, it, false) }
+        }
     }
 }
+
+fun goodTest(t: Int) =
+    t in tests || tests.isEmpty()
 
 fun test(t: Int, rx: NewRegex, s: String, expected: Boolean=true) =
     run {

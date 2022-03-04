@@ -1,4 +1,5 @@
 class Context(val node: Node, private val prev: Node) {
+    var lazy: Boolean = false
 
     class Counter(init: Int =  0) {
         var count = init; private set
@@ -9,6 +10,16 @@ class Context(val node: Node, private val prev: Node) {
         fun inc() {
             ++count
         }
+    }
+
+    class Capture(val group: NewRegex.Group, val start: Int) {
+
+        fun merge(other: Capture, ctx: Context) =
+            if (group==other.group) {
+                Capture(group, if (ctx.lazy) maxOf(start, other.start) else minOf(start, other.start))
+            } else {
+                null
+            }
     }
 
     private var repeatStack = mutableListOf<Counter>()
@@ -37,14 +48,12 @@ class Context(val node: Node, private val prev: Node) {
             repeatStack.removeLast()
         }
 
-    fun eval(ch: Char) =
+    fun eval(index: Int, ch: Char) =
         node.eval(ch, this)
 
     fun collapseWith(other: Context): Context? =
         if (node==other.node &&
             (node.maxRepeats==null || repeats==other.repeats || minOf(repeats, other.repeats) >= node.maxRepeats!!)) this else null
-            .also { val i = 1}
-
 }
 
 fun List<Context>.collapseOne() =

@@ -1,5 +1,4 @@
 class Node (val id: Int) {
-    private val captures = mutableListOf<Capture>()
     val transitions = mutableListOf<Transition>()
     private val predecessors = mutableSetOf<Node>()
     private val nullTransitions = mutableSetOf<Node>()
@@ -7,6 +6,8 @@ class Node (val id: Int) {
     var repeatStart = false; private set
     var transient: Boolean = false; private set
     var maxRepeats: Int? = null; private set
+    val groupStarts = mutableListOf<NewRegex.Group>()
+    var groupEnds = 0
 
     fun clone() =
         let {
@@ -25,6 +26,8 @@ class Node (val id: Int) {
 
     fun show() =
         "$id ${ if (terminal) "T" else ""}${ if (repeatStart) "R" else ""}${ if (transient) "X" else ""}" +
+                (if (groupStarts.isNotEmpty()) "G${groupStarts.map{"${it.id}"}.joinToString(",")}" else "") +
+                (if (groupEnds>0) "E$groupEnds" else "") +
                 transitions.joinToString("") { "\n   $it" } +
                 if (nullTransitions.isNotEmpty()) "\n   +null -> $nullTransitions" else ""
 
@@ -34,11 +37,6 @@ class Node (val id: Int) {
         }
         maxRepeats = transitions.filter{ it.maxRepeats != null}.maxOfOrNull{ it.maxRepeats!! }
     }
-
-    fun setCapture(c: Capture) =
-        also {
-            captures.add(c)
-        }
 
     fun setTerminal() =
         also {
@@ -63,7 +61,17 @@ class Node (val id: Int) {
     fun addNullTransition(n: Node) =
         also {
             nullTransitions.add(n)
-        } 
+        }
+
+    fun addGroup(g: NewRegex.Group) =
+        also {
+            groupStarts.add(g)
+        }
+
+    fun addGroupEnd() =
+        also {
+            ++groupEnds
+        }
 
     fun withNulls() =
         setOf(this) + nullTransitions
@@ -115,6 +123,9 @@ class Node (val id: Int) {
 
     companion object {
         private var nodeId = 1
+        fun reset() {
+            nodeId = 1
+        }
         fun new() =
             Node(nodeId)
                 .also { ++nodeId }
