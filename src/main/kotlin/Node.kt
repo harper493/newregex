@@ -107,6 +107,9 @@ class Node (val id: Int) {
             successors(done)
         }
 
+    fun getNextNodes() =
+        transitions.map{ it.next }.toSet()
+
     private fun successors(done: MutableSet<Node>): Set<Node> =
         let {
             done.add(this)

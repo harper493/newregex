@@ -206,7 +206,7 @@ class NewRegex(val rx: String?=null) {
                 ch == '|' -> {
                     flush()
                     if (groupStack.isEmpty()) {
-                        newGroup(root, capture=false)
+                        newGroup(root.getNextNodes().first(), capture=false)
                             .also { it.synthetic = true }
                     }
                     with (groupStack.last()) {
