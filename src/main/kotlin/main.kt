@@ -1,6 +1,6 @@
-const val verbosity = 0
+const val verbosity = 3
 var failures = 0
-var tests = setOf<Int>()
+var tests = setOf<Int>(300, 301, 302)
 val evaluate = true
 
 
@@ -158,10 +158,21 @@ fun main(args: Array<String>) {
         listOf("abcbbd"),
         listOf()
     )
-
     testRx(207, "a(bc)d(ef)g",
         captures = listOf(C("abcdefg", "bc", "ef"))
     )
+
+    testRx(300, "(.*)(abc).*(abc).*",
+        captures = listOf(C("xabcxabcxabcxabcx", "xabcxabcx", "abc", "abc")))
+
+    testRx(301, "(.*?)(abc)(.*)(abc)(.*)",
+        captures = listOf(C("xabcxabcxabcxabcx", "x", "abc", "xabcxabcx", "abc", "x")))
+
+    testRx(302, "(.*?)(abc)(.*?)(abc)(.*)",
+        captures = listOf(C("xabcxabcxabcxabcx", "x", "abc", "x", "abc", "xabcxabcx")))
+
+    testRx(303, "(.*)(abc)(.*?)(abc)(.*)",
+        captures = listOf(C("xabcxabcxabcxabcx", "xabcxabcx", "abc", "x", "abc", "x")))
 
     if (goodTest(100)) {
         for (rxs in listOf(
@@ -239,7 +250,7 @@ fun goodTest(t: Int) =
 fun test(t: Int, rx: NewRegex, s: String, expected: Boolean=true) =
     run {
         if (verbosity>1) println("\n\"$s\"")
-        val result = rx.match(s, verbose=verbosity > 2)
+        val result = rx.match(s, tracer = { if (verbosity>2) println(it) })
         if ((result!=null) != expected ) {
             println("Wrong result for test $t '$s': got ${!expected}, expected $expected")
             ++failures

@@ -57,7 +57,7 @@ class Context(val node: Node,
                 goodStart = start
                 start = index
             }
-
+        
         fun clone() =
             Capture(group, start, end).also{ it.goodStart = goodStart }
 
@@ -94,12 +94,29 @@ class Context(val node: Node,
             repeatStack.removeLast()
         }
 
+    fun findCapture(g: NewRegex.Group) =
+        captures.find{ cap -> cap.group==g }
+
     fun eval(index: Int, ch: Char) =
         node.eval(index, ch, this)
 
     fun collapseWith(other: Context): Context? =
         if (node==other.node &&
-            (node.maxRepeats==null || repeats==other.repeats || minOf(repeats, other.repeats) >= node.maxRepeats!!)) this else null
+            (node.maxRepeats==null || repeats==other.repeats || minOf(repeats, other.repeats) >= node.maxRepeats!!)) {
+                captures.fold<Capture, Context?>(null) { r, cap ->
+                    r ?: other.findCapture(cap.group)
+                        ?.let{ otherCap ->
+                            when {
+                                !cap.group.repeat || cap.goodStart==null || otherCap.goodStart==null -> null
+                                cap.group.lazy && cap.goodStart!! < otherCap.goodStart!! -> this
+                                cap.group.lazy && cap.goodStart!! > otherCap.goodStart!! -> other
+                                !cap.group.lazy && cap.goodStart!! < otherCap.goodStart!! -> other
+                                !cap.group.lazy && cap.goodStart!! > otherCap.goodStart!! -> this
+                                else -> null
+                            }
+                        } ?: this
+                }
+        } else null
 }
 
 fun List<Context>.collapseOne() =
@@ -118,7 +135,7 @@ fun List<Context>.collapseOne() =
         }
     }
 
-fun List<Context>.collapse(): List<Context> =
+fun List<Context>.collapseOneNode(): List<Context> =
     if (isEmpty()) {
         listOf()
     } else {
@@ -126,6 +143,12 @@ fun List<Context>.collapse(): List<Context> =
             (listOf(first()) + drop(1).collapse())
         }
     }
+
+fun List<Context>.collapse(): List<Context> =
+    groupBy { it.node }
+        .values
+        .map { it.collapseOneNode() }
+        .flatten()
 
 fun List<Context>.toString() =
     "[ ${joinToString(", ") { "$it" }} ]"

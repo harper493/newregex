@@ -13,6 +13,7 @@ class NewRegex(val rx: String?=null) {
     class Group(val start: Node, val capture: Boolean) {
         val id = groupId.also { ++groupId }
         var lazy = false
+        var repeat = false
         var synthetic = false
         val tails = mutableListOf<Node>()
 
@@ -93,6 +94,8 @@ class NewRegex(val rx: String?=null) {
             endChoice()
             val g = getLastGroup()
             val start = g.start
+            g.repeat = true
+            g.lazy = lazy
             val oldPrev = prevNode
             oldPrev.addTransition(Transition.repeat(start))
             start.transitions.forEach{ t -> t.next.addCaptureStart(g) }
@@ -273,7 +276,7 @@ class NewRegex(val rx: String?=null) {
 
     /*
      * match - given a string, return either null, for no match, or a (possibly empty)
-     * list of captures. Eachcapture is either null, if it matched nothing, or
+     * list of captures. Each capture is either null, if it matched nothing, or
      * else the last thing it matched.
      *
      * Operation is as follows:
@@ -283,30 +286,31 @@ class NewRegex(val rx: String?=null) {
      *    A single context can generate more than one next-step contexts if the
      *    regex branches due to either a loop or a choice.
      * 3. At each step, add to the list of contexts all the non-character
-     *    transitions (null, repeat, loop exit etc).
-     * 4. Repeat the above for each character in turn...
-     * 5. ...ending up with a list of contexts that are viable at the end
+     *    transitions (null, repeat, loop exit etc) (done by Context.eval)
+     * 4. Collapse contexts which have converged to the same state (node)
+     *    at the same character.
+     * 5. Call the tracer function with a string describing the current
+     *    state of active contexts. It can for example log this.
+     * 6. Repeat the above for each character in turn...
+     * 7. ...ending up with a list of contexts that are viable at the end
      *    of the string. Filter these to just those that are marked terminal
      *    (there will only ever be one anyway).
-     * 6. Now match the capture groups of the regex against the captures
+     * 8. Now match the capture groups of the regex against the captures
      *    in the terminal context,to generate the result, i.e. a list
      *    of capture strings.
-     * 7. If there was no match, there will either be no remaining contexts,
-     *    or theone(s) that remain are not terminal. In that case return null.
+     * 9. If there was no match, there will either be no remaining contexts,
+     *    or the one(s) that remain are not terminal. In that case return null.
      */
 
-    fun match(str: String, verbose: Boolean = false): List<String?>? =
+    fun match(str: String, tracer: (String)->Unit = { }): List<String?>? =
         let {
-            val start = root.makeClosure(0, listOf(Context(root, 0, root)))
+            val start = root.makeClosure(-1, listOf(Context(root, -1, root)))
             str.foldIndexed(start) { index, contexts, ch ->
                 (contexts.map { ctx ->
                     ctx.eval(index, ch)
                 }.flatten()
-                    .groupBy { it.node }
-                    .values
-                    .map { it.collapse() }
-                    .flatten())
-                    .also { if (verbose) println("$ch   $it") }
+                    .collapse())
+                    .also { tracer("%3d".format(index) + " $ch   $it") }
             }.filter { it.node.terminal }.firstOrNull()
                 ?.let { result ->
                     groups
