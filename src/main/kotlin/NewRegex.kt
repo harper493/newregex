@@ -271,28 +271,52 @@ class NewRegex(val rx: String?=null) {
         root.getAllNodes().forEach{ it.finalize() }
     }
 
-    fun match(str: String, verbose: Boolean = false): List<String?>? {
-        val start = root.makeClosure(0, listOf(Context(root, 0, root)))
-        val result = str.foldIndexed(start) { index, contexts, ch ->
-            (contexts.map { ctx ->
-                ctx.eval(index, ch)
-            }.flatten()
-                .groupBy { it.node }
-                .values
-                .map { it.collapse() }
-                .flatten())
-                .also { if (verbose) println("$ch   $it") }
-        }.filter { it.node.terminal }.firstOrNull()
-          return if (result==null) null
-          else {
-              groups
-                  .filter { it.capture }
-                  .map{ g ->
-                    result.captures.find{ it.group==g }
-                  ?.get(str)} ?: null
-          }
-    }
+    /*
+     * match - given a string, return either null, for no match, or a (possibly empty)
+     * list of captures. Eachcapture is either null, if it matched nothing, or
+     * else the last thing it matched.
+     *
+     * Operation is as follows:
+     *
+     * 1. Create an initial context starting at the root of the regex.
+     * 2. Evaluate the current list of contexts against each character in turn.
+     *    A single context can generate more than one next-step contexts if the
+     *    regex branches due to either a loop or a choice.
+     * 3. At each step, add to the list of contexts all the non-character
+     *    transitions (null, repeat, loop exit etc).
+     * 4. Repeat the above for each character in turn...
+     * 5. ...ending up with a list of contexts that are viable at the end
+     *    of the string. Filter these to just those that are marked terminal
+     *    (there will only ever be one anyway).
+     * 6. Now match the capture groups of the regex against the captures
+     *    in the terminal context,to generate the result, i.e. a list
+     *    of capture strings.
+     * 7. If there was no match, there will either be no remaining contexts,
+     *    or theone(s) that remain are not terminal. In that case return null.
+     */
 
+    fun match(str: String, verbose: Boolean = false): List<String?>? =
+        let {
+            val start = root.makeClosure(0, listOf(Context(root, 0, root)))
+            str.foldIndexed(start) { index, contexts, ch ->
+                (contexts.map { ctx ->
+                    ctx.eval(index, ch)
+                }.flatten()
+                    .groupBy { it.node }
+                    .values
+                    .map { it.collapse() }
+                    .flatten())
+                    .also { if (verbose) println("$ch   $it") }
+            }.filter { it.node.terminal }.firstOrNull()
+                ?.let { result ->
+                    groups
+                        .filter { g -> g.capture }
+                        .map{ g ->
+                            result.captures
+                                .find{ it.group==g }
+                                ?.get(str)}
+                }
+        }
 
     companion object {
         enum class State {

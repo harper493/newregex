@@ -1,6 +1,6 @@
-const val verbosity = 2
+const val verbosity = 0
 var failures = 0
-var tests = setOf<Int>(15)
+var tests = setOf<Int>()
 val evaluate = true
 
 
