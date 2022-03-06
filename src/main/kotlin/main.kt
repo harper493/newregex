@@ -1,6 +1,6 @@
-const val verbosity = 1
+const val verbosity = 2
 var failures = 0
-var tests = setOf<Int>(17,19)
+var tests = setOf<Int>(15)
 val evaluate = true
 
 
@@ -51,7 +51,7 @@ fun main(args: Array<String>) {
         listOf("abd",  "abc",  "abcx")
     )
 
-    testRx(9, "a(bc?d)*e",
+    testRx(9, "a((bc?d)*)e",
         listOf( "ae", "abde", "abcde", "abcdbdbcde"),
         listOf( "abcdbd")
     )
@@ -82,8 +82,15 @@ fun main(args: Array<String>) {
     )
 
     testRx(15, "a(b*c)+d",
-        listOf( "acd", "abcd", "abbcd", "accd", "acbcd", "abbbbcbbbbccccd"),
-        listOf( "ad", "abd" )
+        bad = listOf( "ad", "abd" ),
+        captures = listOf(
+            C("acd", "c"),
+            C("abcd", "bc"),
+            C("abbcd", "bbc"),
+            C("accd", "c"),
+            C("acbcd", "bc"),
+            C("abbbbcbbbbccccd", "c")
+        )
     )
 
     testRx(16, "a(((b*c)+d?)+e)*f",
@@ -123,17 +130,17 @@ fun main(args: Array<String>) {
     )
 
     testRx(201, "a(b(c(d)))e",
-        listOf(),
+        listOf("abcde"),
         listOf()
     )
 
     testRx(202, "a(b(c(d)*)*)*e",
-        listOf(),
+        listOf("ae", "abcde", "abe", "abce", "abbce", "abbcbcddde", "abcdbce"),
         listOf()
     )
 
     testRx(203, "((((a)b)c)d)e",
-        listOf(),
+        listOf("abcde"),
         listOf()
     )
 
@@ -150,6 +157,10 @@ fun main(args: Array<String>) {
     testRx(206, "a(b|c)*b+d",
         listOf("abcbbd"),
         listOf()
+    )
+
+    testRx(207, "a(bc)d(ef)g",
+        captures = listOf(C("abcdefg", "bc", "ef"))
     )
 
     if (goodTest(100)) {
@@ -186,13 +197,38 @@ fun makeRx(rxs: String) =
         }
     }
 
-fun testRx(t: Int, rxstr: String, good: List<String>, bad: List<String>) {
+class C(val str: String, vararg caps: String?) {
+    lateinit var captures: List<String?>
+
+    init {
+        captures = caps.toList()
+    }
+}
+
+fun testRx(t: Int, rxstr: String, good: List<String> = listOf(), bad: List<String> = listOf(), captures: List<C>? = null) {
     NewRegex.reset()
     if (goodTest(t)) {
         val rx = makeRx(rxstr)
         if (evaluate) {
             good.forEach { test(t, rx, it, true) }
             bad.forEach { test(t, rx, it, false) }
+            captures?.forEach { cap ->
+                test(t, rx, cap.str, true)?.zip(cap.captures)
+                    ?.map {
+                        when {
+                            it.first == it.second -> ""
+                            it.first == null -> "expected \"${it.second}\" got no match"
+                            it.second == null -> "expected no match got \"${it.first}\""
+                            else -> "expected \"${it.second}\" got \"${it.first}\""
+                        }
+                    }?.filter{ it != "" }
+                    ?.ifEmpty{ null }
+                    ?.joinToString(", ")
+                    ?.let { msg ->
+                        ++failures
+                        println("For test $t rx \"${cap.str}\" captures not as expected: $msg")
+                    }
+            }
         }
     }
 }
@@ -203,10 +239,12 @@ fun goodTest(t: Int) =
 fun test(t: Int, rx: NewRegex, s: String, expected: Boolean=true) =
     run {
         if (verbosity>1) println("\n\"$s\"")
-        val result = rx.match(s, verbose=verbosity > 1)
-        if (result!=expected) {
-            println("Wrong result for test $t '$s': got $result, expected $expected")
+        val result = rx.match(s, verbose=verbosity > 2)
+        if ((result!=null) != expected ) {
+            println("Wrong result for test $t '$s': got ${!expected}, expected $expected")
             ++failures
+        } else if (result != null && verbosity > 1) {
+            println(result.map{ if (it==null) "\u03bb" else "\"$it\""})
         }
         result
     }

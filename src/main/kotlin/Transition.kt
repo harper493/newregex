@@ -7,24 +7,24 @@ class Transition(
     val action: (Context)->Unit = { },
     val eval: (Char, Context)->Boolean ) {
 
-    private var repeat = false
-    private var repeatStart = false
+    var repeat = false; private set
+    var repeatStart = false; private set
 
     fun clone() =
         Transition(next, descr, consumes, alwaysNull, maxRepeats, action, eval)
 
-    fun matches(ch: Char, ctx: Context) =
+    fun matches(index: Int, ch: Char, ctx: Context) =
         if (consumes && eval(ch, ctx)) {
-            advance(ctx)
+            advance(index, ctx)
         } else null
 
-    fun lambda(ctx: Context) =
+    fun lambda(index: Int, ctx: Context) =
         if (alwaysNull || (!consumes && eval('\u0000', ctx))) {
-            advance(ctx)
+            advance(index, ctx)
         } else null
 
-    private fun advance(ctx: Context): Context {
-        val newctx = ctx.clone(next)
+    private fun advance(index: Int, ctx: Context): Context {
+        val newctx = ctx.clone(this, index)
         action(newctx)
         if (next.repeatStart && !repeat) {
             newctx.pushRepeat()

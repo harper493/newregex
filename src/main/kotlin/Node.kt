@@ -7,7 +7,8 @@ class Node (val id: Int) {
     var transient: Boolean = false; private set
     var maxRepeats: Int? = null; private set
     val groupStarts = mutableListOf<NewRegex.Group>()
-    var groupEnds = 0
+    val captureStarts = mutableListOf<NewRegex.Group>()
+    var groupEnds = mutableListOf<NewRegex.Group>()
 
     fun clone() =
         let {
@@ -26,8 +27,9 @@ class Node (val id: Int) {
 
     fun show() =
         "$id ${ if (terminal) "T" else ""}${ if (repeatStart) "R" else ""}${ if (transient) "X" else ""}" +
-                (if (groupStarts.isNotEmpty()) "G${groupStarts.map{"${it.id}"}.joinToString(",")}" else "") +
-                (if (groupEnds>0) "E$groupEnds" else "") +
+                (groupStarts.describe("G")) +
+                (groupEnds.describe("E")) +
+                (captureStarts.describe("C")) +
                 transitions.joinToString("") { "\n   $it" } +
                 if (nullTransitions.isNotEmpty()) "\n   +null -> $nullTransitions" else ""
 
@@ -68,9 +70,14 @@ class Node (val id: Int) {
             groupStarts.add(g)
         }
 
-    fun addGroupEnd() =
+    fun addGroupEnd(g: NewRegex.Group) =
         also {
-            ++groupEnds
+            groupEnds.add(g)
+        }
+
+    fun addCaptureStart(g: NewRegex.Group) =
+        also {
+            captureStarts.add(g)
         }
 
     fun withNulls() =
@@ -94,12 +101,12 @@ class Node (val id: Int) {
         root.getAllNodes()
             .filter{ it.transitions.any{ it.next==this } }
 
-    fun eval(ch: Char, ctx: Context) =
-            makeClosure(transitions.mapNotNull { it.matches(ch, ctx) })
+    fun eval(index: Int, ch: Char, ctx: Context) =
+            makeClosure(index, transitions.mapNotNull { it.matches(index, ch, ctx) })
                 .filter{ !it.node.transient }
 
-    fun makeClosure(contexts: List<Context>) =
-        iterativeClosure(contexts) { c2 -> c2.node.transitions.mapNotNull { t -> t.lambda(c2) } }
+    fun makeClosure(index: Int, contexts: List<Context>) =
+        iterativeClosure(contexts) { c2 -> c2.node.transitions.mapNotNull { t -> t.lambda(index, c2) } }
 
     fun getAllNodes() =
         let {

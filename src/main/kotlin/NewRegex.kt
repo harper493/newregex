@@ -1,5 +1,6 @@
 class NewRegex(val rx: String?=null) {
     private var root = Node.new()
+    private val groups = mutableListOf<Group>()
 
     init {
         if (rx != null) {
@@ -14,6 +15,11 @@ class NewRegex(val rx: String?=null) {
         var lazy = false
         var synthetic = false
         val tails = mutableListOf<Node>()
+
+        fun get(str: String, ctx: Context) =
+            ctx.captures
+                .find{ it.group==this }
+                ?.get(str)
     }
 
     fun show() = root.getAllNodes().joinToString("\n") { it.show() }
@@ -44,6 +50,7 @@ class NewRegex(val rx: String?=null) {
         fun newGroup(start: Node, capture: Boolean) =
             Group(start, capture)
                 .also { g ->
+                    groups.add(g)
                     start.addGroup(g)
                     groupStack.add(g)
                 }
@@ -51,27 +58,44 @@ class NewRegex(val rx: String?=null) {
         fun pushGroup(capture: Boolean) =
             let {
                 val start = prevNode
-                prevNode.addTransition(Transition.lambda(newNode()))
+                start.addTransition(Transition.lambda(newNode()))
                 newGroup(start, capture)
             }
 
-        fun popGroup() =
+        fun getLastGroup() =
             (groupStack.lastOrNull()
+                ?: throwIf(true, "unmatched right parenthesis").let { null })!!
+
+        fun endChoice() =
+            with (getLastGroup())
+            {
+                if (tails.isNotEmpty()) {
+                    tails.add(prevNode)
+                    prevNode = Node.new()
+                    tails.forEach { n -> n.addTransition(Transition.lambda(prevNode)) }
+                }
+            }
+
+
+        fun popGroup() =
+            getLastGroup()
                 ?.also { group ->
                     if (group.tails.isNotEmpty()) {
                         group.tails.add(prevNode)
                         prevNode = Node.new()
-                        group.tails.forEach{ n -> n.addTransition(Transition.lambda(prevNode)) }
+                        group.tails.forEach { n -> n.addTransition(Transition.lambda(prevNode)) }
                     }
+                    prevNode.addGroupEnd(group)
                     groupStack.removeLast()
-                    prevNode.addGroupEnd()
-                } ?: throwIf(true, "unmatched right parenthesis").let { null })!!
+                }
 
         fun makeRepeat(lazy: Boolean, fromTail: Boolean = false, makeTran: (Node)->Transition = { n -> Transition.exitRepeat(n) }) {
-            val start = popGroup().start
+            endChoice()
+            val g = getLastGroup()
+            val start = g.start
             val oldPrev = prevNode
             oldPrev.addTransition(Transition.repeat(start))
-            start.transitions.forEach{ t -> if (t.consumes) t.setRepeatStart() }
+            start.transitions.forEach{ t -> t.next.addCaptureStart(g) }
             val n = Node.new()
             if (fromTail) {
                 oldPrev.addTransition(makeTran(n))
@@ -80,6 +104,7 @@ class NewRegex(val rx: String?=null) {
             }
             start.setRepeatStart()
             prevNode = n
+            popGroup()
         }
 
         fun makeOptional() {
@@ -95,14 +120,19 @@ class NewRegex(val rx: String?=null) {
 
         fun flush() {
             when(state) {
-                State.lparen ->
+                State.lparen -> {
                     pushGroup(capture=true)
-                State.lparenNoCapture ->
-                    pushGroup(capture=false)
+                }
+                State.lparenNoCapture -> {
+                    pushGroup(capture = false)
+                }
                 State.lparenQ ->
                     throwIf(true, "unexpected character after (?")
                 State.rparen -> {
-                    popGroup()
+                    endChoice()
+                    with (popGroup()) {
+                        start.addCaptureStart(this)
+                    }
                 }
                 State.rparenStar -> {
                     makeRepeat(lazy=false)
@@ -241,9 +271,9 @@ class NewRegex(val rx: String?=null) {
         root.getAllNodes().forEach{ it.finalize() }
     }
 
-    fun match(str: String, verbose: Boolean = false): Boolean {
-        val start = root.makeClosure(listOf(Context(root, root)))
-        return str.foldIndexed(start) { index, contexts, ch ->
+    fun match(str: String, verbose: Boolean = false): List<String?>? {
+        val start = root.makeClosure(0, listOf(Context(root, 0, root)))
+        val result = str.foldIndexed(start) { index, contexts, ch ->
             (contexts.map { ctx ->
                 ctx.eval(index, ch)
             }.flatten()
@@ -252,7 +282,15 @@ class NewRegex(val rx: String?=null) {
                 .map { it.collapse() }
                 .flatten())
                 .also { if (verbose) println("$ch   $it") }
-        }.any { it.node.terminal }
+        }.filter { it.node.terminal }.firstOrNull()
+          return if (result==null) null
+          else {
+              groups
+                  .filter { it.capture }
+                  .map{ g ->
+                    result.captures.find{ it.group==g }
+                  ?.get(str)} ?: null
+          }
     }
 
 
@@ -286,3 +324,6 @@ class NewRegex(val rx: String?=null) {
 
     }
 }
+
+fun List<NewRegex.Group>.describe(prefix: String) =
+    if (isNotEmpty()) "$prefix${map{"${it.id}"}.joinToString(",")}" else ""

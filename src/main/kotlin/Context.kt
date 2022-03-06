@@ -1,5 +1,21 @@
-class Context(val node: Node, private val prev: Node) {
+class Context(val node: Node,
+              index: Int,
+              private val prev: Node,
+              private val repeatStack: MutableList<Counter> = mutableListOf(),
+              val captures: MutableList<Capture> = mutableListOf(),
+              trans: Transition? = null) {
     var lazy: Boolean = false
+
+    init {
+        node.groupEnds.forEach { g ->
+            captures.find{ it.group==g }?.let { it.terminate(index+1) }
+        }
+        node.captureStarts.forEach{ g ->
+            captures.find{ it.group==g && !(trans?.repeat ?: false)}
+                ?.let { it.restart(index+1) }
+                ?: captures.add(Capture(g, index+1)) }
+    }
+
 
     class Counter(init: Int =  0) {
         var count = init; private set
@@ -10,9 +26,16 @@ class Context(val node: Node, private val prev: Node) {
         fun inc() {
             ++count
         }
+
+        fun clone() =
+            Counter(count)
     }
 
-    class Capture(val group: NewRegex.Group, val start: Int) {
+    class Capture(val group: NewRegex.Group, var start: Int, var end: Int? = null) {
+        var goodStart: Int? = null
+
+        override fun toString() =
+            "G${group.id}:" + ((goodStart?.let{"$it..$end/$start"}) ?: "$start")
 
         fun merge(other: Capture, ctx: Context) =
             if (group==other.group) {
@@ -20,18 +43,41 @@ class Context(val node: Node, private val prev: Node) {
             } else {
                 null
             }
+
+        fun terminate(index: Int) =
+            also {
+                if (index > start && start!=goodStart) {
+                    goodStart = start
+                    end = index
+                }
+            }
+
+        fun restart(index: Int) =
+            also {
+                goodStart = start
+                start = index
+            }
+
+        fun clone() =
+            Capture(group, start, end).also{ it.goodStart = goodStart }
+
+        fun get(str: String): String? =
+            if (goodStart!=null) str.subSequence(goodStart!!, end!!).toString() else null
     }
 
-    private var repeatStack = mutableListOf<Counter>()
 
     val repeats: Int get() = repeatStack.lastOrNull()?.count ?: 0
 
     override fun toString() =
-        "$prev\u2192$node" + if (repeatStack.isNotEmpty()) "(${repeatStack.joinToString(",") { "$it" }})" else ""
+        "$prev\u2192$node" +
+                if (repeatStack.isNotEmpty()) "(${repeatStack.joinToString(",") { "$it" }})" else "" +
+                    if (captures.isNotEmpty()) "[${captures.map{"$it"}.joinToString(",")}]" else ""
 
-    fun clone(n: Node) =
-        Context(n, node)
-            .also { newctx -> newctx.repeatStack = this.repeatStack.map { ctr -> Counter(ctr.count)}.toMutableList() }
+    fun clone(trans: Transition, index: Int) =
+        Context(trans.next, index, node,
+            repeatStack.map { it.clone() }.toMutableList(),
+            captures.map { it.clone() }.toMutableList(),
+            trans)
 
     fun countRepeat(doCount: Boolean = true) =
         also {
@@ -49,7 +95,7 @@ class Context(val node: Node, private val prev: Node) {
         }
 
     fun eval(index: Int, ch: Char) =
-        node.eval(ch, this)
+        node.eval(index, ch, this)
 
     fun collapseWith(other: Context): Context? =
         if (node==other.node &&
